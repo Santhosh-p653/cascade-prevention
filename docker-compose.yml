@@ -18,6 +18,8 @@ services:
     tty: true
     ports:
       - "3000:3000"
+    environment:
+      - HOSTNAME=0.0.0.0  # 👈 ADD THIS LINE
     command: sh -c "npm install && npm run dev"
     depends_on:
       - backend
