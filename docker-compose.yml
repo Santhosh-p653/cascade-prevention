@@ -13,6 +13,7 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
+      - /app/node_modules
     stdin_open: true
     tty: true
     ports:
