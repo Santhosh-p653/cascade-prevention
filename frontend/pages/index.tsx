@@ -1,29 +1,75 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:8000';
+
+interface Metrics {
+  total_requests?: number;
+  avg_latency_ms?: number;
+  error_count?: number;
+  error_rate?: number;
+}
+
+interface CircuitState {
+  state?: 'CLOSED' | 'HALF_OPEN' | 'OPEN' | string;
+  failure_count?: number;
+  threshold?: number;
+  opened_at?: number;
+  cooldown_seconds?: number;
+}
+
+interface Incident {
+  incident_id: string;
+  service_name: string;
+  reason: string;
+  metric_value: string | number;
+}
+
+interface Diagnostics {
+  incident_id: string;
+  root_cause_hypothesis: string;
+  suggested_mitigation: string;
+}
+
+interface RecentResponse {
+  id: number;
+  mode: string;
+  status_code: number;
+  duration_ms: number;
+  fallback: boolean;
+}
+
+interface MetricCardProps {
+  label: string;
+  value: string | number;
+  warn?: boolean;
+}
 
 export default function Dashboard() {
-  const [metrics, setMetrics] = useState({});
-  const [circuit, setCircuit] = useState({});
-  const [incidents, setIncidents] = useState([]);
-  const [diagnostics, setDiagnostics] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [recentResponses, setRecentResponses] = useState([]);
-  const [cooldownCountdown, setCooldownCountdown] = useState(0);
+  const [metrics, setMetrics] = useState<Metrics>({});
+  const [circuit, setCircuit] = useState<CircuitState>({});
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [recentResponses, setRecentResponses] = useState<RecentResponse[]>([]);
+  const [cooldownCountdown, setCooldownCountdown] = useState<number>(0);
 
   const fetchData = async () => {
     try {
       const [mRes, cRes, iRes] = await Promise.all([
         fetch(`${API_BASE}/metrics`),
         fetch(`${API_BASE}/circuit-breaker`),
-        fetch(`${API_BASE}/incidents`)
+        fetch(`${API_BASE}/incidents`),
       ]);
       if (mRes.ok) setMetrics(await mRes.json());
       if (cRes.ok) {
-        const cData = await cRes.json();
+        const cData: CircuitState = await cRes.json();
         setCircuit(cData);
         if (cData.state === 'OPEN' && cData.opened_at) {
-          const remaining = (cData.cooldown_seconds || 3.0) - ((Date.now() / 1000) - cData.opened_at);
+          const remaining =
+            (cData.cooldown_seconds || 3.0) - (Date.now() / 1000 - cData.opened_at);
           setCooldownCountdown(Math.max(0, remaining));
         } else {
           setCooldownCountdown(0);
@@ -31,7 +77,7 @@ export default function Dashboard() {
       }
       if (iRes.ok) setIncidents(await iRes.json());
     } catch (e) {
-      console.error("Backend offline:", e);
+      console.error('Backend offline:', e);
     }
   };
 
@@ -50,7 +96,7 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, [cooldownCountdown]);
 
-  const triggerSim = async (mode) => {
+  const triggerSim = async (mode: string) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/simulate?mode=${mode}`, { method: 'POST' });
@@ -61,31 +107,31 @@ export default function Dashboard() {
           mode,
           status_code: data.status_code,
           duration_ms: data.duration_ms,
-          fallback: data.data?.circuit_open || false
+          fallback: data.data?.circuit_open || false,
         },
-        ...prev.slice(0, 7)
+        ...prev.slice(0, 7),
       ]);
       await fetchData();
     } catch (err) {
-      console.error("Sim error:", err);
+      console.error('Sim error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const inspectIncident = async (id) => {
+  const inspectIncident = async (id: string) => {
     try {
       const res = await fetch(`${API_BASE}/diagnostics/${id}`, { method: 'POST' });
       if (res.ok) setDiagnostics(await res.json());
     } catch (err) {
-      console.error("Diagnostic error:", err);
+      console.error('Diagnostic error:', err);
     }
   };
 
-  const stateColors = {
+  const stateColors: Record<string, { bg: string; border: string; label: string }> = {
     CLOSED: { bg: '#10b981', border: '#059669', label: 'CLOSED (Passing Traffic)' },
     HALF_OPEN: { bg: '#f59e0b', border: '#d97706', label: 'HALF-OPEN (Canary Probe Mode)' },
-    OPEN: { bg: '#ef4444', border: '#dc2626', label: 'OPEN (Fast Failing / Fallback Active)' }
+    OPEN: { bg: '#ef4444', border: '#dc2626', label: 'OPEN (Fast Failing / Fallback Active)' },
   };
 
   const currentState = circuit.state || 'CLOSED';
@@ -108,7 +154,7 @@ export default function Dashboard() {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
       }}>
         <div>
           <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.9 }}>Breaker Status</div>
@@ -136,9 +182,9 @@ export default function Dashboard() {
       {/* Live Metric Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
         <MetricCard label="Total Requests" value={metrics.total_requests || 0} />
-        <MetricCard label="Average Latency" value={`${metrics.avg_latency_ms || 0} ms`} warn={metrics.avg_latency_ms > 300} />
+        <MetricCard label="Average Latency" value={`${metrics.avg_latency_ms || 0} ms`} warn={(metrics.avg_latency_ms ?? 0) > 300} />
         <MetricCard label="Failed Responses" value={metrics.error_count || 0} />
-        <MetricCard label="Error Rate" value={`${metrics.error_rate || 0}%`} warn={metrics.error_rate > 20} />
+        <MetricCard label="Error Rate" value={`${metrics.error_rate || 0}%`} warn={(metrics.error_rate ?? 0) > 20} />
       </div>
 
       {/* Real-Time Live Feed */}
@@ -153,7 +199,7 @@ export default function Dashboard() {
                 background: r.status_code >= 500 ? '#fee2e2' : '#f0fdf4',
                 border: `1px solid ${r.status_code >= 500 ? '#fca5a5' : '#bbf7d0'}`,
                 fontSize: 12,
-                minWidth: 120
+                minWidth: 120,
               }}>
                 <div><strong>{r.mode.toUpperCase()}</strong></div>
                 <div>Status: {r.status_code}</div>
@@ -207,7 +253,7 @@ export default function Dashboard() {
   );
 }
 
-function MetricCard({ label, value, warn }) {
+function MetricCard({ label, value, warn }: MetricCardProps) {
   return (
     <div style={{ border: '1px solid #e2e8f0', padding: 14, borderRadius: 8, background: warn ? '#fef2f2' : '#ffffff' }}>
       <div style={{ fontSize: 12, color: '#64748b' }}>{label}</div>
@@ -216,15 +262,15 @@ function MetricCard({ label, value, warn }) {
   );
 }
 
-const btnStyle = (bg) => ({
+const btnStyle = (bg: string) => ({
   backgroundColor: bg,
   color: '#fff',
   border: 'none',
   padding: '8px 14px',
   borderRadius: 6,
-  cursor: 'pointer',
+  cursor: 'pointer' as const,
   fontSize: 13,
-  fontWeight: 500
+  fontWeight: 500,
 });
 
 const actionBtnStyle = {
@@ -233,6 +279,6 @@ const actionBtnStyle = {
   border: 'none',
   padding: '4px 10px',
   borderRadius: 4,
-  cursor: 'pointer',
-  fontSize: 12
+  cursor: 'pointer' as const,
+  fontSize: 12,
 };
